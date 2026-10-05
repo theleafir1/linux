@@ -1,0 +1,258 @@
+// https://t.me/theleafir1
+/dts-v1/;
+
+#include <dt-bindings/iio/qcom,spmi-adc7-pm7325.h>
+#include <dt-bindings/iio/qcom,spmi-adc7-pm8350b.h>
+#include <dt-bindings/iio/qcom,spmi-adc7-pmk8350.h>
+#include <dt-bindings/leds/common.h>
+#include <dt-bindings/media/video-interfaces.h>
+#include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
+#include <dt-bindings/regulator/qcom,rpmh-regulator.h>
+#include <dt-bindings/sound/qcom,q6afe.h>
+#include <dt-bindings/sound/qcom,q6asm.h>
+
+#include "sm7325.dtsi"
+#include "pm7325.dtsi"
+#include "pm8350b.dtsi" /* PM7325B */
+#include "pm8350c.dtsi" /* PM7350C */
+#include "pmk8350.dtsi" /* PMK7325 */
+
+/delete-node/ &xbl_mem;
+/delete-node/ &aop_mem;
+/delete-node/ &reserved_xbl_uefi_log;
+/delete-node/ &video_mem;
+/delete-node/ &rmtfs_mem;
+
+/ {
+	model = "Realme GT Master";
+	compatible = "realme,lunaa", "qcom,sm7325";
+	chassis-type = "handset";
+	
+	qcom,msm-id = <0x1db 0x10000 0x203 0x10000>;
+	qcom,board-id = <0x22 0x00>;
+	
+	chosen {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		stdout-path = &framebuffer0;
+
+		framebuffer0: framebuffer@e1000000 {
+			compatible = "simple-framebuffer";
+			reg = <0x0 0xe1000000 0x0 (1080 * 2400 * 4)>;
+			width = <1080>;
+			height = <2400>;
+			stride = <(1080 * 4)>;
+			format = "a8r8g8b8";
+			clocks = <&gcc GCC_DISP_HF_AXI_CLK>,
+			         <&gcc GCC_DISP_SF_AXI_CLK>;
+		};
+	};
+	
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		
+        	framebuffer_region@e1000000 {
+			reg = <0x0 0xe1000000 0x0 (1080 * 2400 * 4)>;
+			no-map;
+		};
+		
+		rmtfs_mem: memory@eb100000 {
+	       compatible = "qcom,rmtfs-mem";
+	       reg = <0 0xeb100000 0 0x280000>;
+	       no-map;
+
+	       qcom,client-id = <1>;
+	       qcom,vmid = <15>;
+        };
+        
+		xbl_aop_mem: xbl_aop_mem@80700000 {
+			no-map;
+			reg = <0x00 0x80700000 0x00 0x160000>;
+		};
+
+		reserved_xbl_uefi_log: reserved_xbl_uefi@80880000 {
+			no-map;
+			reg = <0x00 0x80880000 0x00 0x14000>;
+		};
+
+		cdsp_secure_heap: cdsp_secure_heap@81800000 {
+			no-map;
+			reg = <0x00 0x81800000 0x00 0x1e00000>;
+		};
+
+		camera: camera@86200000 {
+			no-map;
+			reg = <0x00 0x86200000 0x00 0x500000>;
+		};
+
+		video_mem: video@8ad00000 {
+			no-map;
+			reg = <0x00 0x8ad00000 0x00 0x500000>;
+		};
+
+		cvp: cvp@8b200000 {
+			no-map;
+			reg = <0x00 0x8b200000 0x00 0x500000>;
+		};
+
+		ipa_gsi: ipa_gsi@8b710000 {
+			no-map;
+			reg = <0x00 0x8b710000 0x00 0xa000>;
+		};
+
+		kboot_uboot_logmem: kboot_uboot_logmem@9fe00000 {
+			reg = <0x00 0x9fe00000 0x00 0x200000>;
+			compatible = "oplus,xbl_uefi_kbootlog";
+			xbluefi-offset = <0x1f7000>;
+			no-map;
+		};
+
+		removed_region: removed_region@c0000000 {
+			no-map;
+			reg = <0x00 0xc0000000 0x00 0x8e00000>;
+		};
+
+		pil_trustedvm_region: pil_trustedvm_region@d0800000 {
+			no-map;
+		};
+
+		qrtr_shmem: qrtr-shmem {
+			no-map;
+			reg = <0x00 0xd7ef7000 0x00 0x9000>;
+		};
+
+		neuron_block0: neuron_block@0 {
+			no-map;
+			reg = <0x00 0xd7f00000 0x00 0x80000>;
+		};
+
+		neuron_block1: neuron_block@1 {
+			no-map;
+			reg = <0x00 0xd7f80000 0x00 0x80000>;
+		};
+
+		splash_region: splash_region {
+			reg = <0x00 0xe1000000 0x00 0x2300000>;
+			label = "cont_splash_region";
+		};
+
+		dfps_data_memory: dfps_data_memory {
+			reg = <0x00 0xe3300000 0x00 0x100000>;
+			label = "dfps_data_memory";
+		};
+
+		ramoops: ramoops {
+			compatible = "ramoops";
+			reg = <0x00 0xe9700000 0x00 0x5b8000>;
+			pmsg-size = <0x200000>;
+			mem-type = <0x02>;
+			record-size = <0x40000>;
+			console-size = <0x40000>;
+			ftrace-size = <0x200000>;
+			devinfo-size = <0x8000>;
+			dumpinfo-size = <0x8000>;
+			rsv01info-size = <0x8000>;
+			rsv02info-size = <0x8000>;
+			rsv03info-size = <0x8000>;
+			rsv04info-size = <0x8000>;
+			rsv05info-size = <0x8000>;
+			ecc-size = <0x00>;
+			no-map;
+		};
+
+		adsp_region: adsp_region {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x00 0x00 0x00 0xffffffff>;
+			reusable;
+			alignment = <0x00 0x400000>;
+			size = <0x00 0xc00000>;
+		};
+
+		user_contig_region: user_contig_region {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x00 0x00 0x00 0xffffffff>;
+			reusable;
+			alignment = <0x00 0x400000>;
+			size = <0x00 0x1000000>;
+		};
+
+		qseecom_region: qseecom_region {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x00 0x00 0x00 0xffffffff>;
+			reusable;
+			alignment = <0x00 0x400000>;
+			size = <0x00 0x1400000>;
+		};
+
+		non_secure_display_region: non_secure_display_region {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x00 0x00 0x00 0xffffffff>;
+			reusable;
+			alignment = <0x00 0x400000>;
+			size = <0x00 0x6400000>;
+		};
+
+		qseecom_ta_region: qseecom_ta_region {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x00 0x00 0x00 0xffffffff>;
+			reusable;
+			alignment = <0x00 0x400000>;
+			size = <0x00 0x1000000>;
+		};
+
+		secure_display_region: secure_display_region {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x00 0x00 0x00 0xffffffff>;
+			reusable;
+			alignment = <0x00 0x400000>;
+			size = <0x00 0x8c00000>;
+		};
+
+		linux_cma: linux,cma {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x00 0x00 0x00 0xffffffff>;
+			reusable;
+			alignment = <0x00 0x400000>;
+			size = <0x00 0x6000000>;
+			linux,cma-default;
+		};
+
+		mem_dump_region: mem_dump_region {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x00 0x00 0x00 0xffffffff>;
+			reusable;
+			size = <0x00 0x2c00000>;
+		};
+
+		audio_cma_region: audio_cma_region {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x00 0x00 0x00 0xffffffff>;
+			reusable;
+			alignment = <0x00 0x400000>;
+			size = <0x00 0x1c00000>;
+		};
+
+		memshare_region: memshare_region {
+			compatible = "shared-dma-pool";
+			no-map;
+			alloc-ranges = <0x00 0x00 0x00 0xdfffffff>;
+			alignment = <0x00 0x100000>;
+			size = <0x00 0x800000>;
+		};
+
+		cnss_wlan_region: cnss_wlan_region {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x00 0x00 0x00 0xffffffff>;
+			reusable;
+			alignment = <0x00 0x400000>;
+			size = <0x00 0x1400000>;
+		};
+	};
+};
+
+&tlmm {
+	gpio-reserved-ranges = <0 4>; //FIXME
+};
