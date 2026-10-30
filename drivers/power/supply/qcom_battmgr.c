@@ -17,6 +17,10 @@
 #include <linux/math.h>
 #include <linux/units.h>
 
+#include <linux/delay.h>
+#include <linux/of.h>
+#include <linux/usb/role.h>
+
 #define BATTMGR_CHEMISTRY_LEN	4
 #define BATTMGR_STRING_LEN	128
 
@@ -38,6 +42,9 @@ enum qcom_battmgr_variant {
 #define NOTIF_BAT_STATUS		0x80
 #define NOTIF_BAT_INFO			0x81
 #define NOTIF_BAT_CHARGING_STATE	0x83
+#define OPLUS_NOTIF_OTG_ENABLE   0x49
+#define OPLUS_NOTIF_OTG_DISABLE  0x50
+#define OPLUS_NOTIF_CHG_STATUS   0x59
 
 #define BATTMGR_BAT_INFO		0x9
 
@@ -333,7 +340,11 @@ struct qcom_battmgr {
 	struct qcom_battmgr_wireless wireless;
 
 	struct work_struct enable_work;
-
+    
+    struct usb_role_switch *role_sw;
+    enum usb_role prev_role;
+    bool otg_online;
+    struct work_struct otg_work;
 	/*
 	 * @lock is used to prevent concurrent power supply requests to the
 	 * firmware, as it then stops responding.
@@ -1217,6 +1228,17 @@ static void qcom_battmgr_notification(struct qcom_battmgr *battmgr,
 	case NOTIF_WLS_PROPERTY:
 		power_supply_changed(battmgr->wls_psy);
 		break;
+	case OPLUS_NOTIF_OTG_ENABLE:
+	   battmgr->otg_online = true;
+	   schedule_work(&battmgr->otg_work);
+	   break;
+    case OPLUS_NOTIF_OTG_DISABLE:
+	   battmgr->otg_online = false;
+	   schedule_work(&battmgr->otg_work);
+	   break;
+	case OPLUS_NOTIF_CHG_STATUS: /* Oplus-specific something */
+	case BATTMGR_USB_PROPERTY_SET:
+	   break;
 	default:
 		dev_err(battmgr->dev, "unknown notification: %#x\n", notification);
 		break;
@@ -1597,6 +1619,53 @@ static void qcom_battmgr_enable_worker(struct work_struct *work)
 	ret = qcom_battmgr_request(battmgr, &req, sizeof(req));
 	if (ret)
 		dev_err(battmgr->dev, "failed to request power notifications\n");
+
+	msleep(2000);
+	ret = qcom_battmgr_request_property(battmgr, 0x33, 14, 1); /* USB_OTG_AP_ENABLE */
+	dev_info(battmgr->dev, "oplus otg ap_enable: %d\n", ret);
+	ret = qcom_battmgr_request_property(battmgr, 0x33, 15, 1); /* USB_OTG_SWITCH */
+	dev_info(battmgr->dev, "oplus otg switch: %d\n", ret);
+}
+
+static struct usb_role_switch *qcom_battmgr_get_role_sw(struct qcom_battmgr *battmgr)
+{
+	struct device_node *np;
+
+	if (battmgr->role_sw)
+		return battmgr->role_sw;
+
+	np = of_parse_phandle(battmgr->dev->parent->of_node, "usb-role-switch", 0);
+	if (!np)
+		return NULL;
+
+	battmgr->role_sw = usb_role_switch_find_by_fwnode(of_fwnode_handle(np));
+	of_node_put(np);
+
+	return battmgr->role_sw;
+}
+
+static void qcom_battmgr_otg_worker(struct work_struct *work)
+{
+	struct qcom_battmgr *battmgr = container_of(work, struct qcom_battmgr, otg_work);
+	struct usb_role_switch *sw = qcom_battmgr_get_role_sw(battmgr);
+	bool on = READ_ONCE(battmgr->otg_online);
+	int ret;
+
+	if (on) {
+		ret = qcom_battmgr_request_property(battmgr, 0x33, 20, 1);
+		dev_info(battmgr->dev, "oplus otg vbus on: %d\n", ret);
+		if (sw) {
+			battmgr->prev_role = usb_role_switch_get_role(sw);
+			usb_role_switch_set_role(sw, USB_ROLE_HOST);
+		} else {
+			dev_warn(battmgr->dev, "usb role switch not found\n");
+		}
+	} else {
+		if (sw)
+			usb_role_switch_set_role(sw, battmgr->prev_role);
+		ret = qcom_battmgr_request_property(battmgr, 0x33, 20, 0);
+		dev_info(battmgr->dev, "oplus otg vbus off: %d\n", ret);
+	}
 }
 
 static void qcom_battmgr_pdr_notify(void *priv, int state)
@@ -1716,6 +1785,11 @@ static int qcom_battmgr_probe(struct auxiliary_device *adev,
 	if (ret)
 		return ret;
 
+    ret = devm_work_autocancel(dev, &battmgr->otg_work,
+				   qcom_battmgr_otg_worker);
+	if (ret)
+		return ret;
+		
 	battmgr->client = devm_pmic_glink_client_alloc(dev, PMIC_GLINK_OWNER_BATTMGR,
 						       qcom_battmgr_callback,
 						       qcom_battmgr_pdr_notify,
